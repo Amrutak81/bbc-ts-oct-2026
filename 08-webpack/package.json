@@ -1,0 +1,26 @@
+{
+  "name": "02-init",
+  "version": "0.0.1",
+  "description": "Sample initialisation project",
+  "license": "ISC",
+  "author": "",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "webpack serve --mode production",
+    "build": "webpack --mode production",
+    "type-check": "tsc --noEmit",
+    "dev": "webpack serve --mode development"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "html-webpack-plugin": "^5.6.8",
+    "ts-loader": "^9.6.2",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "webpack": "^5.112.0",
+    "webpack-cli": "^7.2.3",
+    "webpack-dev-server": "^6.1.0"
+  }
+}
