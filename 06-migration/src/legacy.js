@@ -1,8 +1,15 @@
-var PI = Math.PI;
+// @ts-check
 
+const PI = Math.PI;
+
+/**
+ * @param { number } radius 
+ * @returns 
+ */
 function getCircleArea(radius) {
 	return radius * radius * PI;
 }
+
 
 function getRectangleArea(length, width) {
 	return length * width;
@@ -28,29 +35,29 @@ function getArea(shape) {
 	}
 }
 
-var shapes = [];
+const shapes = [];
 
 function makeShape(type, props) {
-	var shape = { type: type };
-	for (var key in props) {
+	const shape = { type: type };
+	for (let key in props) {
 		shape[key] = props[key];
 	}
 	shapes.push(shape);
 	return shape;
 }
 
-var circle = makeShape("circle", { radius: 4 });
-var rectangle = makeShape("rectangle", { length: 7, width: 4 });
-var square = makeShape("square", { width: 5 });
-var rightTriangle = makeShape("rightTriangle", { base: 9, height: 4 });
+const circle = makeShape("circle", { radius: 4 });
+const rectangle = makeShape("rectangle", { length: 7, width: 4 });
+const square = makeShape("square", { width: 5 });
+const rightTriangle = makeShape("rightTriangle", { base: 9, height: 4 });
 
-for (var i = 0; i < shapes.length; i++) {
-	getArea(shapes[i]);
-	console.log(shapes[i]);
+for (let shape of shapes) {
+	getArea(shape);
+	console.log(shape);
 }
 
-var total = 0;
-for (var j = 0; j < shapes.length; j++) {
-	total = total + shapes[j].area;
+let total = 0;
+for (let shape of shapes) {
+	total = total + shape.area;
 }
 console.log("Total area: " + total);
