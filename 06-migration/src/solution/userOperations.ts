@@ -1,4 +1,4 @@
-import { User, UserDatabase, database } from "./userModel";
+import { User, UserDatabase, database } from "./userModel.js";
 
 export function addUser(username: string, age: number, email: string): User {
   const user: User = {

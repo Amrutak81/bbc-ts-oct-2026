@@ -1,4 +1,4 @@
-import { addUser, listUsers, deleteUser, findUser } from "./userOperations";
+import { addUser, listUsers, deleteUser, findUser } from "./userOperations.js";
 
 console.log(addUser("john_doe", 30, "john.doe@example.com"));
 console.log(addUser("jane_smith", 25, "jane.smith@example.com"));
