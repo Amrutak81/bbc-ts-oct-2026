@@ -1,167 +1,122 @@
-# Section 2 — Initialising New Projects
+# Section 11 — Testing
 
-These notes walk through the typical steps and files you create when starting a new TypeScript + Node project. Read them before you run the commands so you understand what each file and option does.
+These notes follow the examples in `src/` and use [Vitest](https://vitest.dev), which runs TypeScript directly and has an API close to Jest's.
 
-## Overview (what we’ll create)
+## Setup
 
-- package.json (npm project manifest + scripts)
-- package-lock.json (exact dependency tree)
-- node_modules/ (installed packages)
-- tsconfig.json (TypeScript compiler options)
-- src/ (your TypeScript source)
-- dist/ (compiled output)
+- `npm install -D vitest`
+- `"test": "vitest"` in `package.json` scripts. `npm test` starts watch mode, and `npx vitest run` runs once and exits.
+- Vitest finds files matching `**/*.{test,spec}.?(c|m)[jt]s?(x)`, so name tests `add.test.ts` or `add.spec.ts`.
+- With `"type": "module"`, imports use the `.js` extension (`import { add } from "./add.js"`) even though the source is `.ts`.
 
-## Common commands (sequence used in class)
+## Anatomy of a test (add.test.ts)
 
-1. npm init
-2. npm install -D typescript tsx @types/node
-3. npx tsc --init
-4. Edit package.json scripts and tsconfig.json as needed
-5. npm run dev (during development)
-6. npm run build && npm start (for production/serve)
+```ts
+import { test, expect } from "vitest";
 
-Example scripts added to package.json:
+test("returns correct answer when adding two numbers", () => {
+  // Arrange - Given
+  const a = 3;
+  const b = 4;
+  // Act - When
+  const result = add(a, b);
+  // Assert - Then
+  expect(result).toBe(7);
+});
+```
 
-- "dev": "tsx --watch src/app.ts" — run the app from TS and watch for changes (tsx runs TS directly).
-- "build": "tsc" — compile to JavaScript in dist/.
-- "start": "node dist/app.js" — run compiled output.
-- "test": placeholder for tests.
+- **Arrange / Act / Assert** (or Given / When / Then) keeps each test readable: set up, do one thing, check one outcome.
+- Name tests after the behaviour, not the function.
+- Cover three kinds of case: the **happy path**, **edge cases** and the **unhappy path**.
 
-Dev dependencies in the example:
+## Table-driven tests with `test.each`
 
-- typescript — the compiler
-- tsx — fast dev runner for TypeScript/ESM
-- @types/node — Node.js type declarations (useful when using Node APIs)
+```ts
+const testCases = [
+  { a: -1, b: -10, expected: -11 },
+  { a: 0, b: 0, expected: 0 },
+];
 
-## What each file does
+test.each(testCases)("adding $a and $b", ({ a, b, expected }) => {
+  expect(add(a, b)).toBe(expected);
+});
+```
 
-- package.json
-  - Describes the project and contains npm scripts.
-  - Stores dependency metadata (devDependencies vs dependencies).
-  - Consider adding "type": "module" if you want Node to treat .js as ESM; otherwise Node behavior depends on file extensions (.mjs/.cjs) and tsconfig.module settings.
+- One test body runs for every row, and `$a` / `$b` in the title are filled in from the row.
+- Good for edge cases: negatives, zero, floats, `Number.MAX_SAFE_INTEGER`.
+- Floating point: `0.1 + 0.2` is not `0.3`. Use `toBeCloseTo` for inexact values.
 
-- package-lock.json
-  - Records exact installed versions (reproducible installs).
-  - Commit it to version control for apps; libraries may have different considerations.
+## Testing errors
 
-- node_modules/
-  - Installed packages — do not commit this folder; add to .gitignore.
+```ts
+expect(() => add("1" as any, true as any)).toThrow();
+```
 
-- tsconfig.json
-  - Central place to configure TypeScript compilation behavior (explained below).
+- Wrap the call in an arrow function. `expect(add(...)).toThrow()` runs `add` immediately, so the error is thrown before `expect` can catch it.
+- Use `as any` to pass deliberately wrong types, because TypeScript would otherwise refuse to compile the test.
+- `toThrow("message")` or `toThrow(TypeError)` makes the assertion more specific.
+- `toThrowErrorMatchingInlineSnapshot` records the error in the test file the first time it runs.
 
-## tsconfig.json — key options from the example and what they mean
+## Inline snapshots
 
-- rootDir: "./src"
-  - Where your TypeScript source files live. Compiler will treat this as the project root for sources.
+- `toMatchInlineSnapshot()` with no argument makes Vitest write the current value into the test file. Review it, then commit it.
+- Later runs fail if the value changes. Update deliberately with `u` in watch mode or `vitest -u`.
+- Best for small, stable values. Avoid snapshotting large objects, because people stop reading the diffs.
 
-- outDir: "./dist"
-  - Where compiled JavaScript and maps are emitted.
+## Testing async code (req.test.ts)
 
-- module: "nodenext"
-  - Node + ESM-aware module semantics (recommended for Node ESM projects). Requires matching Node / package.json settings (see "type": "module") or using .mts/.cts extensions.
+- Mark the test `async` and `await` the result, or `return` the promise. If you forget, the test finishes before the assertions run and passes without testing anything.
+- Rejections: `await expect(promise).rejects.toThrow()`.
+- The `done` callback is no longer supported in Vitest. Wrap a callback API in a `Promise` and `await` that instead.
 
-- target: "es2024"
-  - Language level to emit. Pick a target compatible with the Node version you intend to run on (newer targets produce less-transpiled output).
-  - Note: `target: "es5"` is deprecated as of TypeScript 6.0 and becomes a hard error in TypeScript 7 — don't reach for it in new configs even if you see it in older tutorials or Stack Overflow answers.
+### Fake timers
 
-- types: ["node"]
-  - Include Node type declarations (requires @types/node dev dependency).
+`fakeFetch` waits 2 seconds. Tests shouldn't.
 
-- sourceMap: true
-  - Emit source maps so debuggers and stack traces map back to TypeScript.
+```ts
+beforeEach(() => vi.useFakeTimers());
+afterEach(() => vi.useRealTimers());
 
-- noUncheckedIndexedAccess: true
-  - Makes reading from index signatures produce possibly undefined results — safer but stricter.
+const promise = fakeFetch("https://bbc.co.uk");
+vi.runAllTimers();
+const response = await promise;
+```
 
-- exactOptionalPropertyTypes: true
-  - Differentiates between optional properties and properties that may be undefined.
+- Start the call first, advance the clock, then `await`.
+- Always restore real timers in `afterEach`, or later tests are affected.
+- `beforeEach` / `afterEach` run around every test in the file.
 
-- strict: true
-  - Enables the strict type checking family (recommended).
+## Testing types (type-testing.test.ts)
 
-- jsx: "react-jsx"
-  - JSX transform variant (only relevant if you use JSX/React).
+Runtime tests only fail on the values you give them. A missing `case` in a `switch` is a bug no value-based test will find unless it happens to hit that path.
 
-- verbatimModuleSyntax: true
-  - Emit module syntax closer to the source; useful with Node ESM and bundlers.
+- `area` ends its `switch` with `const exhaustive: never = shape`. Adding a new `Shape` without handling it is a **compile error**.
+- `expectTypeOf` asserts on the type TypeScript infers:
 
-- isolatedModules: true
-  - Ensure each file can be transpiled in isolation (helps with tools like tsx, Babel).
+```ts
+expectTypeOf(fetchArea(shape)).resolves.toEqualTypeOf<number>();
+expectTypeOf<Shape["kind"]>().toEqualTypeOf<"circle" | "square">();
+```
 
-- noUncheckedSideEffectImports: true
-  - Warn if imports are used for side-effects but cannot be checked by TS (newer checks).
+- `expectTypeOf` is checked by the type checker, not at runtime. The test body runs fine either way, so run `tsc --noEmit` (or `vitest --typecheck`) to see type failures.
+- Use `toBeCloseTo(12.566, 3)` for the circle area, since `Math.PI` results are inexact.
 
-- moduleDetection: "force"
-  - Force module detection to treat files as modules (useful when mixing scripts/modules).
+## Common matchers
 
-- skipLibCheck: true
-  - Skip type checking of declaration files to speed up compilation (tradeoff: subtle lib mismatches may be missed).
+| Matcher                  | Use for                                 |
+| ------------------------ | --------------------------------------- |
+| `toBe`                   | primitives, reference equality          |
+| `toEqual`                | deep equality of objects and arrays     |
+| `toBeCloseTo`            | floating-point numbers                  |
+| `toThrow`                | functions that throw                    |
+| `rejects.toThrow`        | promises that reject                    |
+| `toBeNull`, `toBeTruthy` | null and truthiness                     |
+| `toMatchInlineSnapshot`  | small stable values                     |
 
-Notes:
+## Best practices
 
-- "declaration" and "declarationMap" are commented out. If you’re authoring a library, enable "declaration": true to emit .d.ts files.
-- If you rely on Node global APIs, install @types/node and keep types: ["node"].
-- Adjust "target" and "module" for compatibility with your Node runtime or browser targets.
-
-## Development workflow
-
-- Dev (fast iteration)
-  - Use tsx --watch src/app.ts (or ts-node-dev, nodemon+tsx) to run TypeScript directly and reload on changes.
-  - Keep source in src/ so tsc outDir works predictably.
-
-- Build & Run (production)
-  - npm run build → transpiles TS to JS in dist/
-  - npm start → run dist/app.js with node
-
-## Best practices / recommendations
-
-- Add a .gitignore with at least:
-  - node_modules/
-  - dist/
-  - .env (if using env files)
-- Keep source in src/ and output to dist/.
-- Use devDependencies for build/dev tools (typescript, tsx, @types/\*). Use dependencies for runtime libraries needed by your app when installed by end-users.
-- Enable strict type checking (strict: true) to catch issues early.
-- Choose a target appropriate for the Node version you run; upgrade Node to use newer ES targets.
-- For Node ESM projects:
-  - Either set package.json "type": "module" or use .mjs/.cjs file extensions.
-  - Using "module": "nodenext" in tsconfig helps with Node's dual ESM/CJS semantics.
-- Use source maps during development to get accurate stack traces.
-- If publishing a library, enable "declaration": true and consider "moduleResolution" settings.
-- Commit package-lock.json to ensure deterministic installs for apps.
-
-## Common pitfalls & quick fixes
-
-- "Cannot use import statement outside a module"
-  - Ensure Node treats the file as a module: add "type": "module" in package.json, or compile to CommonJS, or use correct .mjs/.cjs extensions.
-
-- ESM / CJS mismatch (ERR_REQUIRE_ESM)
-  - Align tsconfig.module + package.json "type" + runtime expectations. For Node ESM use "nodenext" or output ESM files; for CommonJS use "commonjs".
-
-- Missing Node types (TypeScript errors for global Node names)
-  - Install @types/node and add "types": ["node"] to tsconfig or include it via typeRoots.
-
-- Declaration files missing for libraries
-  - Either install @types/yourlib or add a manual declaration (.d.ts) if necessary.
-
-- Slow build times
-  - Use incremental builds: add "incremental": true in tsconfig, and consider project references for very large repos.
-
-## Quick command cheat sheet
-
-- Initialize project: npm init
-- Install dev tools: npm install -D typescript tsx @types/node
-- Create tsconfig.json: npx tsc --init
-- Run in dev mode: npm run dev
-- Build: npm run build
-- Run compiled code: npm start
-
-## Short checklist (before first commit)
-
-- [ ] src/ directory exists with an entry (src/app.ts)
-- [ ] tsconfig.json configured (rootDir, outDir, target, module)
-- [ ] package.json scripts include dev, build, start
-- [ ] devDependencies installed (typescript, tsx, @types/node)
-- [ ] .gitignore contains node_modules/ and dist/
-- [ ] package-lock.json committed
+- Test behaviour, not implementation details.
+- One reason to fail per test.
+- Test boundaries (`0`, negative numbers, empty input), not just the obvious value.
+- Keep tests fast and independent of each other. Fake time and network.
+- Test the failure path as carefully as the success path.
